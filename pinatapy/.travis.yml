@@ -1,0 +1,12 @@
+language: python
+python:
+  - "3.7"
+install:
+  - pip install -r requirements.txt
+  - pip install .
+env:
+  global:
+    - PINATA_API_KEY=$pinata_api_key
+    - PINATA_SECRET_API_KEY=$pinata_secret_api_key
+script:
+  python3 -m unittest
