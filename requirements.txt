@@ -11,7 +11,6 @@ fastapi
 python-dotenv
 pydantic
 google-cloud-aiplatform
-pinatapy
 numpy
 scikit-learn
 
