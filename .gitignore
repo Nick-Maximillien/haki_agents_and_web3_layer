@@ -1,0 +1,32 @@
+# Ignore Google Cloud service account credentials
+hakichain_agent/central-accord-475812-g4-6d21ba7b0230.json
+
+# General Python ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+.env
+*.log
+
+# Project-specific ignores
+*.sqlite3
+*.db
+/static/
+media/
+
+# Secrets & keys
+*.json
+*.key
+*.pem
+*.p12
+*.crt
+*.env
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
