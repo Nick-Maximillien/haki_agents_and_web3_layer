@@ -11,7 +11,7 @@ from pinatapy import PinataPy
 import json
 import httpx
 
-NODE_DAG_API = "http://10.21.14.222:5001" 
+NODE_DAG_API = "https://constellation-server.onrender.com" 
 
 # -------------------------
 # Environment Config
