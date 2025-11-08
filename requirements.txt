@@ -11,7 +11,7 @@ fastapi
 python-dotenv
 pydantic
 google-cloud-aiplatform
-git+https://github.com/Vourhey/pinatapy.git@master#egg=pinatapy
+pinatapy
 numpy
 scikit-learn
 
