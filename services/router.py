@@ -53,7 +53,11 @@ async def run_and_report(module, payload: dict):
             )
 
             # ICP
-            icp_id = await icp.register_metadata_hash(document_id, payload.get("metadata", {}))
+            try:
+                icp_id = await icp.register_metadata_hash(document_id, payload.get("metadata", {}))
+            except Exception as e:
+                print(f"[ICP Unreachable] Skipping ICP push for document {document_id}: {e}")
+                icp_id = None  
 
             # DAG / Constellation (optional)
             try:
@@ -175,7 +179,9 @@ async def push_document_to_integrations(payload: dict):
     try:
         icp_id = await icp.register_metadata_hash(document_id, metadata)
     except Exception as e:
-        print(f"[ICP Push Error] Document {document_id}: {e}")
+        print(f"[ICP Unreachable] Skipping ICP push for document {document_id}: {e}")
+        icp_id = None
+
 
     try:
         dag_result = await dag.push_document(
