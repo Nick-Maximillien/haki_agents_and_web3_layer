@@ -7,8 +7,7 @@ from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 from fastapi.responses import JSONResponse
-from fastapi import Body, HTTPException # Need to make sure these are imported at the top
-
+from fastapi import Body, HTTPException  # Need to make sure these are imported at the top
 
 from services import lens, draft, review, docs
 from services.integrations import story, icp, dag  
@@ -19,6 +18,11 @@ DJANGO_CALLBACK_URL = os.getenv(
     "DJANGO_CALLBACK_URL",
     "http://localhost:8000/documents/agent/callback/"
 )
+
+# -----------------------------
+# Toggle ICP integration here
+# -----------------------------
+ICP_ENABLED = False
 
 # ---------------------------------------------------------
 # AGENT EXECUTION PIPELINE (Lens, Draft, Review)
@@ -52,12 +56,13 @@ async def run_and_report(module, payload: dict):
                 payload.get("metadata", {})
             )
 
-            # ICP
-            try:
-                icp_id = await icp.register_metadata_hash(document_id, payload.get("metadata", {}))
-            except Exception as e:
-                print(f"[ICP Unreachable] Skipping ICP push for document {document_id}: {e}")
-                icp_id = None  
+            # ICP (skip if disabled)
+            if ICP_ENABLED:
+                try:
+                    icp_id = await icp.register_metadata_hash(document_id, payload.get("metadata", {}))
+                except Exception as e:
+                    print(f"[ICP Unreachable] Skipping ICP push for document {document_id}: {e}")
+                    icp_id = None  
 
             # DAG / Constellation (optional)
             try:
@@ -160,7 +165,7 @@ async def agent_notify(payload: dict, background_tasks: BackgroundTasks):
 
 
 # ---------------------------------------------------------
-# STORY + ICP + DAG REGISTER ENDPOINT (unchanged)
+# STORY + ICP + DAG REGISTER ENDPOINT
 # ---------------------------------------------------------
 async def push_document_to_integrations(payload: dict):
     document_id = payload.get("document_id")
@@ -176,12 +181,12 @@ async def push_document_to_integrations(payload: dict):
     except Exception as e:
         print(f"[Story Push Error] Document {document_id}: {e}")
 
-    try:
-        icp_id = await icp.register_metadata_hash(document_id, metadata)
-    except Exception as e:
-        print(f"[ICP Unreachable] Skipping ICP push for document {document_id}: {e}")
-        icp_id = None
-
+    if ICP_ENABLED:
+        try:
+            icp_id = await icp.register_metadata_hash(document_id, metadata)
+        except Exception as e:
+            print(f"[ICP Unreachable] Skipping ICP push for document {document_id}: {e}")
+            icp_id = None
 
     try:
         dag_result = await dag.push_document(
@@ -220,9 +225,9 @@ async def register_story_endpoint(payload: dict, background_tasks: BackgroundTas
     return {"status": "accepted", "message": "Document push started in background"}
 
 
-# services/router.py (ADD THIS SECTION)
-# ... [existing code up to the last function] ...
-# Pydantic Model definition (must be defined or imported here)
+# -----------------------------
+# Pydantic Model for Evidence
+# -----------------------------
 class EvidencePayload(BaseModel):
     document_id: int
     title: str
@@ -231,21 +236,13 @@ class EvidencePayload(BaseModel):
     excerpt: Optional[str] = None
     owner: str
 
-# ---------------------------------------------------------
-# CASE CREATION & FETCH ENDPOINTS (Moved from main.py)
-# Note: They are defined WITHOUT the /agent prefix here.
-# ---------------------------------------------------------
 
-@router.post("/evidence") # Will become /agent/evidence
+# ---------------------------------------------------------
+# CASE CREATION & FETCH ENDPOINTS
+# ---------------------------------------------------------
+@router.post("/evidence")
 async def mark_as_evidence(payload: EvidencePayload = Body(...)):
-    """
-    When the user marks a detected match as evidence, 
-    create a 'case' record on ICP using document_id.
-    """
     try:
-        # NOTE: You need to ensure the logic here is correct, 
-        # specifically the call to icp.register_metadata_hash
-        
         metadata = {
             "title": payload.title,
             "url": payload.url,
@@ -254,33 +251,30 @@ async def mark_as_evidence(payload: EvidencePayload = Body(...)):
             "owner": payload.owner
         }
 
-        # Assuming this function call is correctly imported from your icp.py
-        record_id = await icp.register_metadata_hash(
-            document_id=payload.document_id,
-            metadata=metadata
-        )
+        record_id = None
+        if ICP_ENABLED:
+            record_id = await icp.register_metadata_hash(
+                document_id=payload.document_id,
+                metadata=metadata
+            )
 
         if record_id:
             return {"status": "ok", "record_id": record_id, "message": "Case stored successfully"}
         else:
-            raise HTTPException(status_code=500, detail="Failed to create case on ICP")
+            raise HTTPException(status_code=500, detail="Failed to create case on ICP or ICP disabled")
 
     except Exception as e:
-        # print("❌ Error creating case:", e) # (Remove this print as traceback is usually enough)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/cases") # Will become /agent/cases
+@router.get("/cases")
 async def list_cases():
-    """
-    Fetch all recorded cases from ICP.
-    Returns an array of case metadata for Cases.tsx.
-    """
     try:
+        if not ICP_ENABLED:
+            return {"status": "ok", "cases": [], "message": "ICP disabled"}
+
         records = await icp.list_records()
         formatted_cases = []
-        
-        # ... (rest of your list_cases logic from main.py goes here) ...
 
         for rec in records:
             if not isinstance(rec, dict):
@@ -298,5 +292,4 @@ async def list_cases():
         return {"status": "ok", "cases": formatted_cases}
 
     except Exception as e:
-        # print("❌ Failed to list cases:", e)
         raise HTTPException(status_code=500, detail=str(e))
